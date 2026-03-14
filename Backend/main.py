@@ -11,17 +11,20 @@ from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from fastapi import UploadFile, File, Form
 import os, shutil
 from pathlib import Path
-
 from Project import ProjectContext # Gestion de proyectos
-from Backend.CollectionManager import Collection, Question
+from CollectionManager import Collection, Question
+
+
 # =========================================================
 # CONFIG
 # =========================================================
 
-SECRET_KEY = "09d25e094456457dgsrthtdytyjfaa6ca880e8d3e7"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
-DATABASE_URL = "sqlite:///./users.db"
+from dotenv import load_dotenv
+load_dotenv()
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("HASH_ALGORITHM")
+ACCESS_TOKEN_EXPIRE_MINUTES = os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES")
+DATABASE_URL = os.getenv("DATABASE_SQLITE_SERVER")
 
 engine = create_engine(
     DATABASE_URL, connect_args={"check_same_thread": False}
