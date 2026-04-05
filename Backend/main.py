@@ -1,3 +1,4 @@
+import os, shutil
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -9,17 +10,13 @@ from pydantic import BaseModel
 from sqlalchemy import Boolean, Column, Integer, String, create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from fastapi import UploadFile, File, Form
-import os, shutil
 from pathlib import Path
-from Project import ProjectContext # Gestion de proyectos
-from CollectionManager import Collection, Question
-
-
-# =========================================================
-# CONFIG
-# =========================================================
-
 from dotenv import load_dotenv
+from Project import ProjectContext # Gestion de proyectos
+from CollectionManager import Collection, Question # Gestion de DBs (RAGs)
+
+
+#region CONFIG
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("HASH_ALGORITHM")
@@ -42,11 +39,10 @@ app = FastAPI()
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+#endregion
 
-# =========================================================
-# MODELOS SQLALCHEMY
-# =========================================================
 
+#region SQLALCHEMY MODELS
 class User(Base):
     __tablename__ = "users"
 
@@ -58,13 +54,18 @@ class User(Base):
     disabled = Column(Boolean, default=False)
     role = Column(String, default="user")
 
-# Crear tablas
-Base.metadata.create_all(bind=engine)
+class Project(Base):
+    __tablename__ = "projects"
 
-# =========================================================
-# SCHEMAS
-# =========================================================
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    owner_id = Column(Integer)
 
+Base.metadata.create_all(bind=engine) # Creates tables
+#endregion
+
+
+#region SCHEMAS
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -87,10 +88,10 @@ class UserOut(BaseModel):
     class Config:
         from_attributes = True
 
-# =========================================================
-# DEPENDENCY DB
-# =========================================================
+#endregion
 
+
+#region DEPENDENCY DB
 def get_db():
     db = SessionLocal()
     try:
@@ -98,9 +99,11 @@ def get_db():
     finally:
         db.close()
 
-# =========================================================
-# UTILIDADES SEGURIDAD
-# =========================================================
+#endregion
+
+
+#region HASHING AND GENERAL SEC
+
 def get_password_hash(password: str):
     return pwd_context.hash(password)
 
@@ -124,10 +127,10 @@ def create_access_token(data: dict, expires_delta: timedelta):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-# =========================================================
-# ENDPOINT REGISTRO
-# =========================================================
+#endregion
 
+
+#region USER_REGISTER
 @app.post("/register", response_model=UserOut)
 def register_user(user: UserCreate, db: Session = Depends(get_db)):
     existing_user = db.query(User).filter(User.username == user.username).first()
@@ -150,10 +153,10 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
 
     return db_user
 
-# =========================================================
-# LOGIN JWT
-# =========================================================
+#endregion
 
+
+#region LOGIN JWT
 @app.post("/token", response_model=Token)
 def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = authenticate_user(db, form_data.username, form_data.password)
@@ -172,9 +175,11 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db:
 
     return {"access_token": access_token, "token_type": "bearer"}
 
-# =========================================================
-# GET CURRENT USER
-# =========================================================
+#endregion
+
+
+#region WHOAMI
+
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
@@ -200,40 +205,23 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 
     return user
 
-# =========================================================
-# ENDPOINT PROTEGIDO
-# =========================================================
-
 @app.get("/me", response_model=UserOut)
 def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
 
+#endregion
+
 
 #region Endpoints Backend
-# =========================================================
-# MODELO PROJECT
-# =========================================================
-
-class Project(Base):
-    __tablename__ = "projects"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-    owner_id = Column(Integer)
-
-Base.metadata.create_all(bind=engine)
-
-
-# =========================================================
-# UPLOAD DOC
-# =========================================================
 
 @app.post("/upload-doc")
 def upload_doc(name: str = Form(...), db: Session = Depends(get_db), 
                file: UploadFile = File(...), file_type: str = Form(...), current_user: User = Depends(get_current_user)):
     """
-    Este endpoint, desde un usuario identificado, recibe un documento (PDF, MD, TXT, Excel) y el tipo que corresponde (un string con la extensión).
-    Cuando recibe el documento, esta función debe de guardarlo en memoria local y devolver {'status': 'OK'/'NO'} segun si se pudo guardar o no.
+    This endpoint, from an identified user, receives a document (PDF, MD, TXT, Excel) and the type it corresponds to
+    (a string with the extension).
+    When this endpoint receives the document, it stores it in local memory and returns {'status': 'OK'/'NO'} depending on
+    whether it could save it.
     """
 
     allowed = {"pdf", "md", "txt", "xlsx", "xls", "csv"}
@@ -274,14 +262,10 @@ def upload_doc(name: str = Form(...), db: Session = Depends(get_db),
         return {"status": "NO"}
 
 
-# =========================================================
-# NEW PROJECT
-# =========================================================
-
 @app.post("/project/new")
 def new_project(name: str = Form(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
-    Este endpoint debe recibir un nombre de proyecto. El nombre se debe guardar y asociar al usuario que lo ha subido.
+    This endpoint receives a project name, saves the name and associated it to the uploader user. Returns status as well.
     """
 
     existing = db.query(Project).filter(
@@ -309,14 +293,13 @@ def new_project(name: str = Form(...), db: Session = Depends(get_db), current_us
 
 
 # =========================================================
-# CHECK PROJECT
+#  PROJECT
 # =========================================================
 
 @app.get("/project/check")
 def check_project(name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
-    Este endpoint debe recibir un nombre de proyecto. Se devuelve {'status': 'OK'/'NO'}
-    Según si existe asociado al usuario.
+    This endpoint receives a project name, returns status ({'status': 'OK'/'NO'}) whether it is associated to the user.
     """
 
     project = db.query(Project).filter(
@@ -331,8 +314,7 @@ def check_project(name: str, db: Session = Depends(get_db), current_user: User =
 @app.get("/project/compile")
 def RAG_project(name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
-    Este endpoint debe recibir un nombre de proyecto. Se devuelve {'status': 'OK'/'NO'}
-    Según si existe asociado al usuario.
+    This endpoint receives a project name, returns status ({'status': 'OK'/'NO'}) whether it is associated to the user.
     """
 
     project = db.query(Project).filter(
@@ -349,7 +331,7 @@ def RAG_project(name: str, db: Session = Depends(get_db), current_user: User = D
 
 
 # =========================================================
-# CREATE BASE ASPECT
+#  ASPECT
 # =========================================================
 
 @app.post("/collections/{collectionname}/create")
@@ -360,10 +342,6 @@ def create_base_collection(collectionname: str, current_user: User = Depends(get
     except Exception:
         return {"status": "NO"}
 
-
-# =========================================================
-# ADD BASE QUESTION
-# =========================================================
 
 @app.post("/collections/{collectionname}/add-question")
 def add_base_question(
@@ -378,10 +356,6 @@ def add_base_question(
         return {"status": "NO"}
 
 
-# =========================================================
-# GET QUESTION ID
-# =========================================================
-
 @app.get("/collections/{collectionname}/question-id")
 def get_question_id(
     collectionname: str,
@@ -393,11 +367,6 @@ def get_question_id(
         return {"status": "OK", "id": qid}
     except Exception:
         return {"status": "NO", "id": -1}
-
-
-# =========================================================
-# DELETE QUESTION
-# =========================================================
 
 @app.delete("/collections/{collectionname}/delete-question")
 def delete_base_question(
@@ -417,11 +386,6 @@ def delete_base_question(
         return {"status": "OK"}
     except Exception:
         return {"status": "NO"}
-
-
-# =========================================================
-# MODIFY QUESTION
-# =========================================================
 
 @app.put("/collections/{collectionname}/modify-question")
 def modify_base_question(
@@ -443,8 +407,8 @@ def modify_base_question(
     except Exception:
         return {"status": "NO"}
 
-#! Completar con todos los collectionos
-@app.get("/project/excecute")
+#! (Pending overload unit tests)
+@app.get("/project/execute")
 def Collection_Fill(name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     project = db.query(Project).filter(
         Project.name == name,
@@ -461,7 +425,6 @@ def Collection_Fill(name: str, db: Session = Depends(get_db), current_user: User
     return {"status": "NO"}
 
 
-#! Verify
 @app.get("/collection/data")
 def get_collection_data(
     project: str,
@@ -470,11 +433,10 @@ def get_collection_data(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Devuelve todas las filas de la tabla questions
-    para un collectiono concreto de un proyecto.
+    Returns all rows of the questions table for a specific project collection.
     """
 
-    # comprobar que el proyecto pertenece al usuario
+    # checks the project belongs to the user
     proj = db.query(Project).filter(
         Project.name == project,
         Project.owner_id == current_user.id
@@ -514,7 +476,6 @@ def get_collection_data(
     finally:
         session.close()
 
-
 @app.get("/project/collections")
 def get_project_collections(
     project: str,
@@ -522,7 +483,7 @@ def get_project_collections(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Devuelve todos los collectionos creados para un proyecto.
+    Returns all created collections for a project.
     """
 
     proj = db.query(Project).filter(
@@ -551,7 +512,7 @@ def get_user_projects(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Devuelve todos los proyectos asociados al usuario autenticado.
+    Returns all associated projects to the authenticated user.
     """
 
     projects = db.query(Project).filter(
@@ -568,6 +529,5 @@ def get_user_projects(
     
     
 #endregion 
-
 
 

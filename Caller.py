@@ -163,7 +163,7 @@ def delete_question(token, collectionname, question):
     
 
 def ExecuteCollections(token):
-    url = f"{BASE_URL}/project/excecute"
+    url = f"{BASE_URL}/project/execute"
 
     headers = {"Authorization": f"Bearer {token}"}
 

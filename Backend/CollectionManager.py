@@ -1,9 +1,8 @@
-from pathlib import Path
-from Project import ProjectContext
 import os, shutil, pickle, numpy as np, faiss
+from pathlib import Path
 from sqlalchemy import create_engine, Column, Integer, Text, Boolean, Float
 from sqlalchemy.orm import sessionmaker, declarative_base
-
+from Project import ProjectContext
 
 Base = declarative_base()
 
@@ -23,14 +22,14 @@ class Collection:
     
     DefaultDBPath = Path(".", "DEFAULT", "collections")
     
-    def __init__(self, P: ProjectContext, AspectName: str):
+    def __init__(self, P: ProjectContext, CollectionName: str):
         self.P = P
         self.ProjectPath = Path(".", P.NAME)
-        self.DB_path = Path(".", P.NAME, "collections", AspectName)
-        self.Name = AspectName
+        self.DB_path = Path(".", P.NAME, "collections", CollectionName)
+        self.Name = CollectionName
         
         if not os.path.isfile(self.DB_path):
-            shutil.copyfile(Collection.DefaultDBPath / AspectName, self.DB_path)
+            shutil.copyfile(Collection.DefaultDBPath / CollectionName, self.DB_path)
 
         sqlite_url = f"sqlite:///{self.DB_path}" # SQLite local
         self.engine = create_engine(sqlite_url, connect_args={"check_same_thread": False})
@@ -73,7 +72,7 @@ class Collection:
 
         return response, closest_chunk, source_file, confidence
     
-    def fill_Aspect(self):
+    def fill_Collection(self):
 
         questions = self.session.query(Question).all()
 
@@ -88,20 +87,20 @@ class Collection:
 
         self.session.commit()
     
-    def reset_Aspect(self):
+    def reset_Collection(self):
         shutil.copyfile(Collection.DefaultDBPath / self.Name, self.DB_path)
 
     @staticmethod
-    def Create_BaseAspect(AspectName: str) -> None:
-        db_path = Collection.DefaultDBPath / AspectName
+    def Create_BaseCollection(CollectionName: str) -> None:
+        db_path = Collection.DefaultDBPath / CollectionName
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
         engine = create_engine(f"sqlite:///{db_path}")
         Base.metadata.create_all(engine)
 
     @staticmethod
-    def Add_BaseQuestion(AspectName: str, question: str) -> None:
-        db_path = Collection.DefaultDBPath / AspectName
+    def Add_BaseQuestion(CollectionName: str, question: str) -> None:
+        db_path = Collection.DefaultDBPath / CollectionName
         engine = create_engine(f"sqlite:///{db_path}")
         Session = sessionmaker(bind=engine)
         session = Session()
@@ -122,8 +121,8 @@ class Collection:
         session.close()
 
     @staticmethod
-    def Get_BaseQuestionID(AspectName: str, question: str) -> int:
-        db_path = Collection.DefaultDBPath / AspectName
+    def Get_BaseQuestionID(CollectionName: str, question: str) -> int:
+        db_path = Collection.DefaultDBPath / CollectionName
         engine = create_engine(f"sqlite:///{db_path}")
         Session = sessionmaker(bind=engine)
         session = Session()
@@ -135,8 +134,8 @@ class Collection:
         return q.id if q else -1
 
     @staticmethod
-    def Delete_BaseQuestion(AspectName: str, question: str | int) -> None:
-        db_path = Collection.DefaultDBPath / AspectName
+    def Delete_BaseQuestion(CollectionName: str, question: str | int) -> None:
+        db_path = Collection.DefaultDBPath / CollectionName
         engine = create_engine(f"sqlite:///{db_path}")
         Session = sessionmaker(bind=engine)
         session = Session()
@@ -144,7 +143,7 @@ class Collection:
         if isinstance(question, int):
             qid = question
         else:
-            qid = Collection.Get_BaseQuestionID(AspectName, question)
+            qid = Collection.Get_BaseQuestionID(CollectionName, question)
 
         if qid != -1:
             q = session.query(Question).filter(Question.id == qid).first()
@@ -155,8 +154,8 @@ class Collection:
         session.close()
 
     @staticmethod
-    def Modify_BaseQuestionID(AspectName: str, question: str | int, new_question: str) -> None:
-        db_path = Collection.DefaultDBPath / AspectName
+    def Modify_BaseQuestionID(CollectionName: str, question: str | int, new_question: str) -> None:
+        db_path = Collection.DefaultDBPath / CollectionName
         engine = create_engine(f"sqlite:///{db_path}")
         Session = sessionmaker(bind=engine)
         session = Session()
@@ -164,7 +163,7 @@ class Collection:
         if isinstance(question, int):
             qid = question
         else:
-            qid = Collection.Get_BaseQuestionID(AspectName, question)
+            qid = Collection.Get_BaseQuestionID(CollectionName, question)
 
         if qid != -1:
             q = session.query(Question).filter(Question.id == qid).first()

@@ -1,10 +1,7 @@
 import requests, os
 from typing import Dict
-from telegram import (
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup
-)
+from dotenv import load_dotenv
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -14,30 +11,23 @@ from telegram.ext import (
     filters
 )
 
-# =========================================================
-# CONFIG
-# =========================================================
-from dotenv import load_dotenv
+#region CONFIG
 load_dotenv()
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 API_URL = os.getenv("TELEGRAM_API_URL")
 
+# whitelist telegram usernames
+WHITELIST = set(os.getenv("TELEGRAM_WHITELIST", "").split(","))
 
-WHITELIST = { # whitelist telegram usernames
-    "usuario1",
-    "usuario2",
-}
-
-# sesiones
+# sessions
 USER_TOKENS: Dict[int, str] = {}
 USER_PROJECT: Dict[int, str] = {}
 USER_COLLECTION: Dict[int, str] = {}
 USER_STATE: Dict[int, str] = {}
 
-# =========================================================
-# SECURITY
-# =========================================================
+#endregion
 
+#region AUTH
 def is_authorized(update: Update) -> bool:
     user = update.effective_user
     if user is None:
@@ -48,12 +38,9 @@ def is_authorized(update: Update) -> bool:
         return False
 
     return True
+#endregion
 
-
-# =========================================================
-# API WRAPPER
-# =========================================================
-
+#region API WRAPPER
 def api_get(endpoint, token, params=None):
     headers = {"Authorization": f"Bearer {token}"}
     return requests.get(f"{API_URL}{endpoint}", headers=headers, params=params)
@@ -68,11 +55,9 @@ def api_delete(endpoint, token, params=None):
     headers = {"Authorization": f"Bearer {token}"}
     return requests.delete(f"{API_URL}{endpoint}", headers=headers, params=params)
 
+#endregion
 
-# =========================================================
-# LOGIN
-# =========================================================
-
+#region LOGIN
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not is_authorized(update):
@@ -118,11 +103,9 @@ async def login(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=main_menu()
     )
 
+#endregion
 
-# =========================================================
-# MENUS
-# =========================================================
-
+#region MENUS
 def main_menu():
 
     kb = [
@@ -154,10 +137,9 @@ def collection_menu():
 
     return InlineKeyboardMarkup(kb)
 
+#endregion
 
-# =========================================================
-# CALLBACK ROUTER
-# =========================================================
+#region CALLBACK ROUTER
 
 async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -297,10 +279,9 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Escribe la pregunta"
         )
 
+#endregion
 
-# =========================================================
-# TEXT HANDLER
-# =========================================================
+#region TEXT HANDLER
 
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -327,10 +308,9 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         USER_STATE[user_id] = None
 
+#endregion
 
-# =========================================================
-# FILE UPLOAD
-# =========================================================
+#region FILE UPLOAD
 
 async def file_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -367,25 +347,19 @@ async def file_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     USER_STATE[user_id] = None
 
+#endregion
 
-# =========================================================
-# BOT
-# =========================================================
-
+#region BOT (MAIN)
 def main():
-
     app = Application.builder().token(BOT_TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("login", login))
-
     app.add_handler(CallbackQueryHandler(callbacks))
-
     app.add_handler(MessageHandler(filters.TEXT, text_handler))
     app.add_handler(MessageHandler(filters.Document.ALL, file_handler))
-
     app.run_polling()
 
+#endregion
 
 if __name__ == "__main__":
     main()
